@@ -1,0 +1,6 @@
+dane/
+raport_cache/
+raport_files/ 
+.Rproj.user/
+.RData
+.RHistory

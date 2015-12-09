@@ -1,0 +1,241 @@
+---
+title: "ligandy"
+author: "Wojciech Miarczyński 106532"
+date: "`r format(Sys.time(), '%d.%m.%Y')`"
+output: html_document
+---
+##Wstęp do analizy
+blablablablablabla
+blablabla
+
+###Wykorzystane biblioteki:
+
+```{r biblioteki, warning=FALSE,message=FALSE, errors=FALSE}
+library(knitr)
+library(dplyr)
+library(ggplot2)
+library(ggExtra)
+library(reshape2)
+```
+
+###Kod i opis zapewniający powtarzalność wyników
+
+```{r inicjalizacja,echo=FALSE}
+set.seed(23)
+#progi które mówią ile w danej kolumnie/wierszu może być wartości NA
+#potem kolumny/wiersze które tego nie spełniają, są usuwane
+col_NA_treshold <- 0.9
+row_NA_treshold <- 0.95
+##pomocnicze funkcje
+remove_NA = function(data=df,row=FALSE,col=FALSE,col_treshold=col_NA_treshold,row_treshold=row_NA_treshold){
+  if(col == TRUE){
+    non_NA_cols <-  as.vector(apply(df, 2, function(df) length(which(!is.na(df)))))
+    cols <- non_NA_cols > nrow(df)*col_treshold
+      return(df[cols])
+  }
+  if(row == TRUE){
+    non_NA_rows <-  as.vector(apply(df, 1, function(df) length(which(!is.na(df)))))
+    rows <- non_NA_rows > ncol(df)*row_treshold
+    return(df[rows,])
+  }
+  
+  
+}
+```
+
+###Wczytywanie danych i czyszczenie 
+
+Znajomość klas poszczególnych kolumn bardzo przyspiesza wczytywanie danych. Dlatego też wykorzystano prostą heurystykę, która z dużą skutecznością potrafi przewidzieć poszczególne klasy :
+```{r heurystyka_typy_kolumn, eval=FALSE,echo=FALSE}
+initial <- read.table("dane/original.txt", nrows=100, sep=";", header = TRUE)
+classes <- sapply(initial,class)
+```
+
+Następnie wykorzystano ją do właściwego wczytania danych, wraz z innymi parametrami :
+
+```{r wczytywanie danych_oryginalnych, eval=FALSE,echo=FALSE}
+df <- read.table( file="dane/original.txt", header = TRUE, sep=";",  fill=TRUE, strip.white = TRUE, blank.lines.skip = TRUE, na.strings = c("nan","NA"))
+```
+
+```{r filtrowanie_res_name_wartosci, eval=FALSE,echo=FALSE}
+df <- df %>% filter(!is.na(res_name), !(res_name %in% c('DA','DC','DT', 'DU', 'DG', 'DI','UNK', 'UNX', 'UNL', 'PR', 'PD', 'Y1', 'EU', 'N', '15P', 'UQ', 'PX4', 'NAN')))
+```
+
+```{r filtrowanie_unikalne_pary, eval=FALSE,echo=FALSE}
+df <- df %>% distinct(pdb_code, res_name)
+```
+
+```{r zapisanie_czystych_danych, eval=FALSE,echo=FALSE}
+write.table(df, file="dane/clean.txt", sep=";")
+
+non_NA_cols <-  as.vector(apply(df, 2, function(df) length(which(!is.na(df)))))
+cols <- non_NA_cols > nrow(df)*col_NA_treshold
+
+non_NA_rows <-  as.vector(apply(df, 1, function(df) length(which(!is.na(df)))))
+rows <- non_NA_rows > ncol(df)*row_NA_treshold
+
+clean <- df[rows,cols]
+
+ncol(clean)
+nrow(clean)
+write.table(clean, file="dane/clean_NA.txt", sep=";")
+
+
+
+```
+
+```{r wczytywanie danych_czystych,cache=TRUE}
+df <- read.table( file="dane/clean.txt", header = TRUE, sep=";", fill=TRUE, strip.white = TRUE, blank.lines.skip = TRUE, na.strings = c("nan","NA"))
+```
+
+
+##Korelacja miedzy zmiennymi :
+```{r korelacja}
+#kolumny part_xxx zostaly usuniete ze wzgledu na ich wysoki poziom korelacji. 
+#Jest ich bardzo dużo dlatego usunięcie ich wpłynie  dobrze na przejrzystość wykresu
+no_part_columns <- df %>% select(-starts_with("part")) 
+cormat <- cor(no_part_columns[,unlist(lapply(no_part_columns, is.numeric))], use="complete.obs")
+melted_cormat <- melt(cormat,na.rm = TRUE)
+
+
+# Heatmap
+library(ggplot2)
+ggplot(data = melted_cormat, aes(Var2, Var1, fill = value))+
+geom_tile(color = "white")+
+scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+    midpoint = 0, limit = c(-1,1), space = "Lab", 
+    name="Pearson\nCorrelation") +
+theme_minimal()+
+theme(axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title.x=element_blank(),
+    axis.title.y=element_blank())+
+coord_fixed() 
+
+```
+
+##Określenie ile przykładów ma każda z klas
+
+```{r rozklad_licznosci_klas,eval=FALSE,echo=FALSE}
+
+licznosci <- df %>% select(res_name) %>% group_by(res_name) %>% summarise(count=n()) %>% arrange(desc(count))
+
+top <- head(licznosci,n=20)
+top$res_name <- factor(top$res_name, levels=unique(top$res_name))
+
+plot <- ggplot(top, aes(x=res_name, y=count, order = desc(count)))+
+  geom_bar(stat="identity")+theme_bw()
+
+plot
+kable(top)
+
+```
+
+##Rozkłady liczby atomów  i elektronów
+
+###Liczba atomów
+```{r rozklad_atomy, eval=FALSE,echo=FALSE}
+ggplot(df, aes(x=local_res_atom_non_h_count)) + geom_histogram(binwidth=1.5) + theme_bw() 
+```
+
+
+###Liczba elektronów
+
+```{r rozklad_elektrony, eval=FALSE,echo=FALSE}
+ggplot(df, aes(x=local_res_atom_non_h_electron_sum)) + geom_histogram(binwidth=5) + theme_bw() 
+```
+
+##Odtworzenie wykresu
+
+```{r podsumowanie wartosci kolumn,echo=FALSE}
+
+wykres <- ggplot(df %>% select(local_res_atom_non_h_electron_sum,local_res_atom_non_h_count), 
+  aes(x = local_res_atom_non_h_electron_sum, y = local_res_atom_non_h_count)) + 
+  stat_density2d(geom="tile", aes(fill = ..density..),contour = FALSE) + 
+  coord_cartesian(xlim = c(0,650), ylim = c(0,100)) +
+  scale_x_continuous(breaks=seq(100,601,100)) +
+  scale_y_continuous(breaks=seq(20,101,20)) +
+  scale_fill_distiller(palette = "Spectral", trans = "reverse") +
+  theme_bw() +
+  theme(legend.position="none",
+      axis.title.x = element_blank(),
+      axis.title.y = element_blank())
+      
+  
+ggMarginal(wykres, type = "histogram", margins = 'both',  size = 5, fill = "#FF0000", col = "#000000", binwidth=5)
+
+
+
+```
+
+##10 klas z największą niezgodnością
+
+
+###Dla liczby atomów
+```{r niezgodnosc_atomy}
+
+numeric_df <- df %>% mutate(diff=abs(local_res_atom_non_h_count-dict_atom_non_h_count))  %>%
+    select(class=res_name, diff) %>% group_by(class) %>% 
+    summarize(Incompatibility = var(diff)) %>% arrange(desc(Incompatibility))
+
+numeric_df <- head(numeric_df,n=10)
+kable(numeric_df)
+
+
+```
+
+###Dla liczby elektronów
+
+```{r niezgodnosc_elektrony}
+
+numeric_df <- df %>% mutate(diff=abs(local_res_atom_non_h_electron_sum-dict_atom_non_h_electron_sum))  %>%
+    select(class=res_name, diff) %>% group_by(class) %>% 
+    summarize(Incompatibility = var(diff)) %>% arrange(desc(Incompatibility))
+
+numeric_df <- head(numeric_df,n=10)
+kable(numeric_df)
+```
+
+
+##Rozkład kolumn part_01_*
+
+```{r rozklad_columns,message=FALSE,warning=FALSE}
+part_01_columns <- df %>% select(starts_with("part_01"))
+
+non_NA_rows <-  as.vector(apply(part_01_columns, 1, function(part_01_columns) length(which(!is.na(part_01_columns)))))
+rows <- non_NA_rows > ncol(part_01_columns)*0.9
+
+clean_part_01 <- part_01_columns[rows,]
+
+loop_step <- 7
+
+for(i in seq(1,dim(clean_part_01)[2],loop_step)){
+  print(i)
+  x <-  i+loop_step
+  print(x)
+  seq <- seq(i:x)
+  print(seq)
+  
+  pl <- ggplot(melt(clean_part_01[1:7]) ,aes(x = value)) + 
+    facet_wrap(~variable,scales = "free_x", ncol = 4) + 
+    geom_histogram(axis.title.x = element_blank(),
+      axis.title.y = element_blank()) + coord_fixed()
+  print(pl)
+}
+
+
+
+
+
+library(grid)
+library(gridExtra)
+ 
+# arrange the four plots on the same graphics outpu
+
+```
+
+
+
+
+
