@@ -2,7 +2,9 @@
 title: "ligandy"
 author: "Wojciech Miarczyński 106532"
 date: "`r format(Sys.time(), '%d.%m.%Y')`"
-output: html_document
+output:
+  md_document:
+    variant: markdown_github
 ---
 
 ###Spis treści : 
