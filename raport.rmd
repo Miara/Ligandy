@@ -24,22 +24,18 @@ library(reshape2)
 set.seed(23)
 #progi które mówią ile w danej kolumnie/wierszu może być wartości NA
 #potem kolumny/wiersze które tego nie spełniają, są usuwane
-col_NA_treshold <- 0.9
-row_NA_treshold <- 0.95
+col_NA_treshold <- 0.95
+row_NA_treshold <- 0.99
 ##pomocnicze funkcje
-remove_NA = function(data=df,row=FALSE,col=FALSE,col_treshold=col_NA_treshold,row_treshold=row_NA_treshold){
-  if(col == TRUE){
+remove_NA_cols = function(data=df,col_treshold=col_NA_treshold){
     non_NA_cols <-  as.vector(apply(df, 2, function(df) length(which(!is.na(df)))))
     cols <- non_NA_cols > nrow(df)*col_treshold
-      return(df[cols])
-  }
-  if(row == TRUE){
-    non_NA_rows <-  as.vector(apply(df, 1, function(df) length(which(!is.na(df)))))
+    return(df[cols])
+}
+remove_NA_rows = function(data=df,row_treshold=row_NA_treshold){
+  non_NA_rows <-  as.vector(apply(df, 1, function(df) length(which(!is.na(df)))))
     rows <- non_NA_rows > ncol(df)*row_treshold
     return(df[rows,])
-  }
-  
-  
 }
 ```
 
@@ -53,20 +49,21 @@ classes <- sapply(initial,class)
 
 Następnie wykorzystano ją do właściwego wczytania danych, wraz z innymi parametrami :
 
-```{r wczytywanie danych_oryginalnych, eval=FALSE,echo=FALSE}
+```{r wczytywanie danych_oryginalnych,echo=FALSE, eval=FALSE}
 df <- read.table( file="dane/original.txt", header = TRUE, sep=";",  fill=TRUE, strip.white = TRUE, blank.lines.skip = TRUE, na.strings = c("nan","NA"))
 ```
 
-```{r filtrowanie_res_name_wartosci, eval=FALSE,echo=FALSE}
+```{r filtrowanie_res_name_wartosci,echo=FALSE, eval=FALSE}
 df <- df %>% filter(!is.na(res_name), !(res_name %in% c('DA','DC','DT', 'DU', 'DG', 'DI','UNK', 'UNX', 'UNL', 'PR', 'PD', 'Y1', 'EU', 'N', '15P', 'UQ', 'PX4', 'NAN')))
 ```
 
-```{r filtrowanie_unikalne_pary, eval=FALSE,echo=FALSE}
+```{r filtrowanie_unikalne_pary,echo=FALSE, eval=FALSE}
 df <- df %>% distinct(pdb_code, res_name)
 ```
 
-```{r zapisanie_czystych_danych, eval=FALSE,echo=FALSE}
+```{r zapisanie_czystych_danych,echo=FALSE, eval=FALSE}
 write.table(df, file="dane/clean.txt", sep=";")
+
 
 non_NA_cols <-  as.vector(apply(df, 2, function(df) length(which(!is.na(df)))))
 cols <- non_NA_cols > nrow(df)*col_NA_treshold
@@ -78,19 +75,17 @@ clean <- df[rows,cols]
 
 ncol(clean)
 nrow(clean)
+
 write.table(clean, file="dane/clean_NA.txt", sep=";")
-
-
-
 ```
 
-```{r wczytywanie danych_czystych,cache=TRUE}
+```{r wczytywanie danych_czystych, cache=TRUE}
 df <- read.table( file="dane/clean.txt", header = TRUE, sep=";", fill=TRUE, strip.white = TRUE, blank.lines.skip = TRUE, na.strings = c("nan","NA"))
 ```
 
 
 ##Korelacja miedzy zmiennymi :
-```{r korelacja}
+```{r korelacja,eval=FALSE}
 #kolumny part_xxx zostaly usuniete ze wzgledu na ich wysoki poziom korelacji. 
 #Jest ich bardzo dużo dlatego usunięcie ich wpłynie  dobrze na przejrzystość wykresu
 no_part_columns <- df %>% select(-starts_with("part")) 
@@ -148,7 +143,7 @@ ggplot(df, aes(x=local_res_atom_non_h_electron_sum)) + geom_histogram(binwidth=5
 
 ##Odtworzenie wykresu
 
-```{r podsumowanie wartosci kolumn,echo=FALSE}
+```{r podsumowanie wartosci kolumn,echo=FALSE,eval=FALSE}
 
 wykres <- ggplot(df %>% select(local_res_atom_non_h_electron_sum,local_res_atom_non_h_count), 
   aes(x = local_res_atom_non_h_electron_sum, y = local_res_atom_non_h_count)) + 
@@ -173,7 +168,7 @@ ggMarginal(wykres, type = "histogram", margins = 'both',  size = 5, fill = "#FF0
 
 
 ###Dla liczby atomów
-```{r niezgodnosc_atomy}
+```{r niezgodnosc_atomy,eval=FALSE,echo=FALSE}
 
 numeric_df <- df %>% mutate(diff=abs(local_res_atom_non_h_count-dict_atom_non_h_count))  %>%
     select(class=res_name, diff) %>% group_by(class) %>% 
@@ -187,7 +182,7 @@ kable(numeric_df)
 
 ###Dla liczby elektronów
 
-```{r niezgodnosc_elektrony}
+```{r niezgodnosc_elektrony,eval=FALSE,echo=FALSE}
 
 numeric_df <- df %>% mutate(diff=abs(local_res_atom_non_h_electron_sum-dict_atom_non_h_electron_sum))  %>%
     select(class=res_name, diff) %>% group_by(class) %>% 
@@ -200,7 +195,7 @@ kable(numeric_df)
 
 ##Rozkład kolumn part_01_*
 
-```{r rozklad_columns,message=FALSE,warning=FALSE}
+```{r rozklad_columns,message=FALSE,warning=FALSE,eval=FALSE,echo=FALSE}
 part_01_columns <- df %>% select(starts_with("part_01"))
 
 non_NA_rows <-  as.vector(apply(part_01_columns, 1, function(part_01_columns) length(which(!is.na(part_01_columns)))))
@@ -208,29 +203,20 @@ rows <- non_NA_rows > ncol(part_01_columns)*0.9
 
 clean_part_01 <- part_01_columns[rows,]
 
-loop_step <- 7
-
-for(i in seq(1,dim(clean_part_01)[2],loop_step)){
-  print(i)
-  x <-  i+loop_step
-  print(x)
-  seq <- seq(i:x)
-  print(seq)
+for(i in seq(1,dim(clean_part_01)[2])){
+  melted <- melt(clean_part_01[i])
+  name <- colnames(part_01_columns)[i]
+  mean <- mean(melted$value)
   
-  pl <- ggplot(melt(clean_part_01[1:7]) ,aes(x = value)) + 
-    facet_wrap(~variable,scales = "free_x", ncol = 4) + 
-    geom_histogram(axis.title.x = element_blank(),
-      axis.title.y = element_blank()) + coord_fixed()
+  pl <- ggplot(melted ,aes(x = value)) + 
+    ggtitle(name)+
+    theme(plot.title = element_text(lineheight=.8, face="bold"))+
+    geom_histogram(axis.title.x = element_blank(),axis.title.y = element_blank())+
+    geom_vline(xintercept = mean , colour="red")+
+    geom_text(aes(x=mean-20, label="mean", y=20), colour="red",  vjust = -2, text=element_text(size=11))
   print(pl)
 }
 
-
-
-
-
-library(grid)
-library(gridExtra)
- 
 # arrange the four plots on the same graphics outpu
 
 ```
