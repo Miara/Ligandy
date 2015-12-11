@@ -4,11 +4,41 @@ author: "Wojciech Miarczyński 106532"
 date: "`r format(Sys.time(), '%d.%m.%Y')`"
 output: html_document
 ---
-##Wstęp do analizy
-blablablablablabla
-blablabla
 
-###Wykorzystane biblioteki:
+###Spis treści : 
+
+[1.Wykorzystane biblioteki](#biblioteki)
+
+[2.Kod zapewniający powtarzalność eksperymentu](#powtarzalnosc)
+
+[3.Wczytanie danych z pliku](#wczytywanie)
+
+[4.Usuwanie wierszy z danymi klasami](#usuwanie)
+
+[5.Kod pozostawiający unikatowe wartości pdb_code i res_name](#unique)
+
+[6.Zapis oczyszczonych danych do pliku](#zapis)
+
+[7.Krótkie podsumowanie danych](#podsumowanie)
+
+[8.Korelacja między zmiennymi](#Korelacja)
+
+[9.Określenie ile przykładów ma każda z klas](#count)
+
+[10.Rozklady liczby atomów i elektronów](#rozklady)
+
+[11.Próba odtworzenia wykresu](#odtworzenie)
+
+[12. Tabela pokazująca 10 klas z największą niezgodnością liczby atomów i elektronów](#niezgodnosc)
+
+[13.Sekcja pokazująca rozkład kolumn zaczynających się do part_01](#rozklad_part)
+
+[14.Sekcja z regresją liniową](#regresja)
+
+
+<a name="biblioteki"></a>
+
+###1. Wykorzystane biblioteki:
 
 ```{r biblioteki, warning=FALSE,message=FALSE, errors=FALSE}
 library(knitr)
@@ -18,53 +48,58 @@ library(ggExtra)
 library(reshape2)
 ```
 
-###Kod i opis zapewniający powtarzalność wyników
+<a name="powtarzalnosc"></a>
 
-```{r inicjalizacja,echo=FALSE}
+###2. Kod i opis zapewniający powtarzalność wyników
+
+
+```{r inicjalizacja}
 set.seed(23)
 #progi które mówią ile w danej kolumnie/wierszu może być wartości NA
 #potem kolumny/wiersze które tego nie spełniają, są usuwane
 col_NA_treshold <- 0.95
 row_NA_treshold <- 0.99
-##pomocnicze funkcje
-remove_NA_cols = function(data=df,col_treshold=col_NA_treshold){
-    non_NA_cols <-  as.vector(apply(df, 2, function(df) length(which(!is.na(df)))))
-    cols <- non_NA_cols > nrow(df)*col_treshold
-    return(df[cols])
-}
-remove_NA_rows = function(data=df,row_treshold=row_NA_treshold){
-  non_NA_rows <-  as.vector(apply(df, 1, function(df) length(which(!is.na(df)))))
-    rows <- non_NA_rows > ncol(df)*row_treshold
-    return(df[rows,])
-}
 ```
 
-###Wczytywanie danych i czyszczenie 
+<a name="wczytywanie"></a>
+
+###3. Wczytywanie danych 
 
 Znajomość klas poszczególnych kolumn bardzo przyspiesza wczytywanie danych. Dlatego też wykorzystano prostą heurystykę, która z dużą skutecznością potrafi przewidzieć poszczególne klasy :
-```{r heurystyka_typy_kolumn, eval=FALSE,echo=FALSE}
+```{r heurystyka_typy_kolumn, eval=FALSE}
 initial <- read.table("dane/original.txt", nrows=100, sep=";", header = TRUE)
 classes <- sapply(initial,class)
 ```
 
 Następnie wykorzystano ją do właściwego wczytania danych, wraz z innymi parametrami :
 
-```{r wczytywanie danych_oryginalnych,echo=FALSE, eval=FALSE}
+```{r wczytywanie danych_oryginalnych, eval=FALSE}
 df <- read.table( file="dane/original.txt", header = TRUE, sep=";",  fill=TRUE, strip.white = TRUE, blank.lines.skip = TRUE, na.strings = c("nan","NA"))
 ```
 
-```{r filtrowanie_res_name_wartosci,echo=FALSE, eval=FALSE}
+<a name="usuwanie"></a>
+
+###4. Usuwanie wierszy z poniższymi klasami
+
+```{r filtrowanie_res_name_wartosci, eval=FALSE}
 df <- df %>% filter(!is.na(res_name), !(res_name %in% c('DA','DC','DT', 'DU', 'DG', 'DI','UNK', 'UNX', 'UNL', 'PR', 'PD', 'Y1', 'EU', 'N', '15P', 'UQ', 'PX4', 'NAN')))
 ```
 
-```{r filtrowanie_unikalne_pary,echo=FALSE, eval=FALSE}
+<a name="unique"></a>
+
+###5. Zostawienie unikalnych par pdb_code i res_name
+```{r filtrowanie_unikalne_pary, eval=FALSE}
 df <- df %>% distinct(pdb_code, res_name)
 ```
 
-```{r zapisanie_czystych_danych,echo=FALSE, eval=FALSE}
+<a name="zapis"></a>
+
+###6. Zapis czystych danych do pliku
+```{r zapisanie_czystych_danych, eval=FALSE}
 write.table(df, file="dane/clean.txt", sep=";")
+```
 
-
+```{r czyszczenie_NA,eval=FALSE,echo=FALSE}
 non_NA_cols <-  as.vector(apply(df, 2, function(df) length(which(!is.na(df)))))
 cols <- non_NA_cols > nrow(df)*col_NA_treshold
 
@@ -83,9 +118,18 @@ write.table(clean, file="dane/clean_NA.txt", sep=";")
 df <- read.table( file="dane/clean.txt", header = TRUE, sep=";", fill=TRUE, strip.white = TRUE, blank.lines.skip = TRUE, na.strings = c("nan","NA"))
 ```
 
+<a name="podsumowanie"></a>
 
-##Korelacja miedzy zmiennymi :
-```{r korelacja,eval=FALSE}
+###7.Krótkie podsumowanie wartości w każdej kolumnie
+```{r podsumowanie wartosci,cache=TRUE}
+summ <- summary(df)
+kable(summ)
+```
+
+<a name="Korelacja"></a>
+
+##8. Korelacja miedzy zmiennymi :
+```{r korelacja,cache=TRUE,warning=FALSE,message=FALSE}
 #kolumny part_xxx zostaly usuniete ze wzgledu na ich wysoki poziom korelacji. 
 #Jest ich bardzo dużo dlatego usunięcie ich wpłynie  dobrze na przejrzystość wykresu
 no_part_columns <- df %>% select(-starts_with("part")) 
@@ -110,9 +154,11 @@ coord_fixed()
 
 ```
 
-##Określenie ile przykładów ma każda z klas
+<a name="count"></a>
 
-```{r rozklad_licznosci_klas,eval=FALSE,echo=FALSE}
+##9. Określenie ile przykładów ma każda z klas
+
+```{r rozklad_licznosci_klas,cache=TRUE}
 
 licznosci <- df %>% select(res_name) %>% group_by(res_name) %>% summarise(count=n()) %>% arrange(desc(count))
 
@@ -127,26 +173,33 @@ kable(top)
 
 ```
 
-##Rozkłady liczby atomów  i elektronów
+<a name="rozklady"></a>
+
+##10. Rozkłady liczby atomów  i elektronów
 
 ###Liczba atomów
-```{r rozklad_atomy, eval=FALSE,echo=FALSE}
+```{r rozklad_atomy,cache=TRUE}
 ggplot(df, aes(x=local_res_atom_non_h_count)) + geom_histogram(binwidth=1.5) + theme_bw() 
 ```
 
 
 ###Liczba elektronów
 
-```{r rozklad_elektrony, eval=FALSE,echo=FALSE}
+```{r rozklad_elektrony,cache=TRUE}
 ggplot(df, aes(x=local_res_atom_non_h_electron_sum)) + geom_histogram(binwidth=5) + theme_bw() 
 ```
 
-##Odtworzenie wykresu
+<a name="odtworzenie"></a>
 
-```{r podsumowanie wartosci kolumn,echo=FALSE,eval=FALSE}
+##11. Odtworzenie wykresu
 
-wykres <- ggplot(df %>% select(local_res_atom_non_h_electron_sum,local_res_atom_non_h_count), 
-  aes(x = local_res_atom_non_h_electron_sum, y = local_res_atom_non_h_count)) + 
+```{r podsumowanie wartosci kolumn,cache=TRUE}
+
+plot_data <- df %>% 
+  mutate(atomy = round(jitter(local_res_atom_non_h_count, amount=0)),elektrony = round(jitter(local_res_atom_non_h_electron_sum,amount=0))) %>% 
+  select(elektrony,atomy)
+
+wykres <- ggplot(plot_data,aes(x=elektrony, y=atomy)) + 
   stat_density2d(geom="tile", aes(fill = ..density..),contour = FALSE) + 
   coord_cartesian(xlim = c(0,650), ylim = c(0,100)) +
   scale_x_continuous(breaks=seq(100,601,100)) +
@@ -158,17 +211,21 @@ wykres <- ggplot(df %>% select(local_res_atom_non_h_electron_sum,local_res_atom_
       axis.title.y = element_blank())
       
   
-ggMarginal(wykres, type = "histogram", margins = 'both',  size = 5, fill = "#FF0000", col = "#000000", binwidth=5)
+ggMarginal(wykres, type = "histogram",  size = 5, fill = "#FF0000", col = "#000000", binwidth=5,
+           xparams = list(binwidth = 5),
+           yparams = list(binwidth = 1))
 
 
 
 ```
 
-##10 klas z największą niezgodnością
+<a name="niezgodnosc"></a>
+
+##12. 10 klas z największą niezgodnością
 
 
 ###Dla liczby atomów
-```{r niezgodnosc_atomy,eval=FALSE,echo=FALSE}
+```{r niezgodnosc_atomy,cache=TRUE}
 
 numeric_df <- df %>% mutate(diff=abs(local_res_atom_non_h_count-dict_atom_non_h_count))  %>%
     select(class=res_name, diff) %>% group_by(class) %>% 
@@ -182,7 +239,7 @@ kable(numeric_df)
 
 ###Dla liczby elektronów
 
-```{r niezgodnosc_elektrony,eval=FALSE,echo=FALSE}
+```{r niezgodnosc_elektrony,cache=TRUE}
 
 numeric_df <- df %>% mutate(diff=abs(local_res_atom_non_h_electron_sum-dict_atom_non_h_electron_sum))  %>%
     select(class=res_name, diff) %>% group_by(class) %>% 
@@ -192,10 +249,11 @@ numeric_df <- head(numeric_df,n=10)
 kable(numeric_df)
 ```
 
+<a name="rozklad_part"></a>
 
-##Rozkład kolumn part_01_*
+##13. Rozkład kolumn part_01_*
 
-```{r rozklad_columns,message=FALSE,warning=FALSE,eval=FALSE,echo=FALSE}
+```{r rozklad_columns,message=FALSE,warning=FALSE,cache=TRUE}
 part_01_columns <- df %>% select(starts_with("part_01"))
 
 non_NA_rows <-  as.vector(apply(part_01_columns, 1, function(part_01_columns) length(which(!is.na(part_01_columns)))))
@@ -221,7 +279,29 @@ for(i in seq(1,dim(clean_part_01)[2])){
 
 ```
 
+<a name="regresja"></a>
 
+##14. Regresja liniowa :
 
+```{r regresja_liniowa,cache=TRUE,message=FALSE, warning=FALSE,cache=TRUE}
+reg <- df
+reg[is.na(reg)] <- 0
+reg <- reg[sapply(reg, is.numeric)]
+
+atom_lm <- lm(local_res_atom_non_h_count ~ ., reg)
+atom_summary <- summary(atom_lm)
+elektron_lm <- lm(local_res_atom_non_h_electron_sum ~ ., reg)
+elektron_summary <- summary(elektron_lm)
+```
+
+Trafność regresji dla: 
+
+* **liczby atomów wg miary R^2 : `r atom_summary$r.squared` ** 
+
+* **liczby atomów wg miary RMSE : `r atom_summary$sigma` **
+
+* **liczby elektronów wg miary R^2 : `r elektron_summary$r.squared` **
+
+* **liczby elektronów wg miary RMSE : `r elektron_summary$sigma` **
 
 
